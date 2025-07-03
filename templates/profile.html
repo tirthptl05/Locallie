@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Locallie - Profile</title>
+</head>
+<body>
+    <h2>User Profile</h2>
+    <p><strong>Name:</strong> {{ name }}</p>
+    <p><strong>Role:</strong> {{ role }}</p>
+    <p><strong>Email:</strong> {{ email }}</p>
+
+    <h3>Help Request History</h3>
+
+    {% if help_requests %}
+        {% for hr in help_requests %}
+            <div style="border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;">
+                <p><strong>Query:</strong> {{ hr[0] }}</p>
+                <p><strong>City:</strong> {{ hr[1] }}</p>
+                <p><strong>Status:</strong> {{ hr[2] }}</p>
+
+                {% if replies[hr[3]] %}
+                    <strong>Replies:</strong>
+                    <ul>
+                        {% for r in replies[hr[3]] %}
+                            <li><strong>{{ r[0] }}:</strong> {{ r[1] }} <em>on {{ r[2] }}</em></li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p>No replies yet.</p>
+                {% endif %}
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No help requests found.</p>
+    {% endif %}
+</body>
+</html>

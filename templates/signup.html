@@ -1,0 +1,39 @@
+<!-- templates/signup.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Locallie - Sign Up</title>
+</head>
+<body>
+    <h2>Sign Up - Locallie</h2>
+    {% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <ul>
+      {% for message in messages %}
+        <li>{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+    <form method="POST" action="/signup">
+        <label>Name:</label><br>
+        <input type="text" name="name" required><br><br>
+
+        <label>Email:</label><br>
+        <input type="email" name="email" required><br><br>
+
+        <label>Password:</label><br>
+        <input type="password" name="password" required><br><br>
+
+        <label>Role:</label><br>
+        <select name="role" required>
+            <option value="traveler">Traveler</option>
+            <option value="local">Local</option>
+        </select><br><br>
+
+        <button type="submit">Sign Up</button>
+    </form>
+</body>
+</html>

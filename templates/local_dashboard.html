@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Local Dashboard - Locallie</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  {% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <ul>
+      {% for message in messages %}
+        <li>{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+{% if session.get('user_id') %}
+    <a href="/logout">Logout</a>
+{% endif %}
+
+
+
+  <div class="container">
+    <h1>Local Dashboard</h1>
+    <a href="{{ url_for('profile') }}">My Profile</a>
+    <a href="/local-inbox">Inbox</a>
+
+    <p>View and reply to help requests based on your city</p>
+
+    <!-- Sample Request -->
+    <div class="request-card">
+      <p><strong>Tourist:</strong> Need auto at Gateway of India</p>
+      <form method="POST">
+        <input type="text" name="reply" placeholder="Type your reply">
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

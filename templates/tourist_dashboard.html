@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Tourist Dashboard - Locallie</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  {% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <ul>
+      {% for message in messages %}
+        <li>{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+{% if session.get('user_id') %}
+    <a href="/logout">Logout</a>
+{% endif %}
+
+
+  <div class="container">
+    <h1>Tourist Dashboard</h1>
+    <a href="/help-request">Post a Help Request</a>
+
+    <a href="{{ url_for('profile') }}">My Profile</a>
+    <form method="POST">
+      City: <input type="text" name="city"><br>
+      Query: <textarea name="query"></textarea><br>
+      <label><input type="checkbox" name="email_alert"> Send me email when answered</label><br>
+      <button type="submit">Post Help Request</button>
+    </form>
+  </div>
+</body>
+</html>

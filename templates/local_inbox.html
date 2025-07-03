@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Local Inbox - Locallie</title>
+</head>
+<body>
+    <h2>Help Requests Inbox</h2>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul>
+        {% for msg in messages %}
+          <li>{{ msg }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    {% for req in requests %}
+        <div style="border: 1px solid black; margin: 10px; padding: 10px;">
+            <strong>From:</strong> {{ req[1] }}<br>
+            <strong>Query:</strong> {{ req[2] }}<br>
+            <strong>City:</strong> {{ req[3] }}<br>
+
+            <form method="POST" action="/local-inbox">
+                <input type="hidden" name="request_id" value="{{ req[0] }}">
+                <textarea name="reply" placeholder="Type your reply..." required></textarea><br>
+                <button type="submit">Send Reply</button>
+            </form>
+        </div>
+    {% endfor %}
+</body>
+</html>

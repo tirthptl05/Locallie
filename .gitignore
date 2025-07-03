@@ -1,0 +1,16 @@
+# Secret environment file
+.env
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# Virtual environment folder
+venv/
+
+# VS Code settings (optional but clean)
+.vscode/
+
+# System files (optional)
+.DS_Store
+Thumbs.db
