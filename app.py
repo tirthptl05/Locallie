@@ -227,6 +227,26 @@ def about():
 def contact():
     return render_template('contact.html')
 
+@app.route('/feedback', methods=['GET', 'POST'])
+def feedback():
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form['email']
+        message = request.form['message']
+
+        try:
+            cursor.execute("INSERT INTO feedback (name, email, message) VALUES (%s, %s, %s)", (name, email, message))
+            conn.commit()
+            flash("Thank you for your feedback!")
+            return redirect('/')
+        except Exception as e:
+            print("Error saving feedback:", e)
+            flash("Something went wrong.")
+            return redirect('/feedback')
+
+    return render_template('feedback.html')
+
+
 @app.route('/how-it-works')
 def how_it_works():
     return render_template('how_it_works.html')
