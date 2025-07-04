@@ -1,0 +1,74 @@
+{% extends "admin_base.html" %}
+{% block content %}
+<h2 class="mb-3">Help Requests</h2>
+
+<!-- 🧮 Status Counts -->
+<div class="mb-3">
+    <span class="badge bg-secondary me-2">Total: {{ help_data|length }}</span>
+    <span class="badge bg-warning text-dark me-2">Pending: {{ counts['Pending'] or 0 }}</span>
+    <span class="badge bg-info text-dark me-2">Accepted: {{ counts['Accepted'] or 0 }}</span>
+    <span class="badge bg-success me-2">Replied: {{ counts['Replied'] or 0 }}</span>
+</div>
+
+<!-- 🔽 Filter Dropdown -->
+<form method="get" action="/admin/help_requests" class="mb-3">
+    <div class="row">
+        <div class="col-md-4">
+            <select name="status" class="form-select" onchange="this.form.submit()">
+                <option value="" {% if not current_filter %}selected{% endif %}>All</option>
+                <option value="Pending" {% if current_filter == 'Pending' %}selected{% endif %}>Pending</option>
+                <option value="Accepted" {% if current_filter == 'Accepted' %}selected{% endif %}>Accepted</option>
+                <option value="Replied" {% if current_filter == 'Replied' %}selected{% endif %}>Replied</option>
+            </select>
+        </div>
+    </div>
+</form>
+
+<!-- 📋 Help Requests Table -->
+<table class="table table-bordered table-hover">
+    <thead class="table-dark">
+        <tr>
+            <th>ID</th>
+            <th>Tourist</th>
+            <th>Query</th>
+            <th>City</th>
+            <th>Status</th>
+            <th>Accepted By</th>
+            <th>Created At</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in help_data %}
+        <tr>
+            <td>{{ r.id }}</td>
+            <td>{{ r.tourist_email or 'User ID ' ~ r.user_id }}</td>
+            <td>{{ r.query }}</td>
+            <td>{{ r.city }}</td>
+            <td>
+                {% if r.status == 'Pending' %}
+                    <span class="badge bg-warning text-dark">Pending</span>
+                {% elif r.status == 'Accepted' %}
+                    <span class="badge bg-info text-dark">Accepted</span>
+                {% elif r.status == 'Replied' %}
+                    <span class="badge bg-success">Replied</span>
+                {% else %}
+                    <span class="badge bg-secondary">{{ r.status }}</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if r.accepted_by %}
+                    {{ r.local_email or 'Local ID ' ~ r.accepted_by }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>{{ r.created_at }}</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" class="text-center">No requests found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

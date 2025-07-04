@@ -1,39 +1,50 @@
-<!-- templates/signup.html -->
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Locallie - Sign Up</title>
-</head>
-<body>
-    <h2>Sign Up - Locallie</h2>
-    {% with messages = get_flashed_messages() %}
-  {% if messages %}
-    <ul>
-      {% for message in messages %}
-        <li>{{ message }}</li>
-      {% endfor %}
-    </ul>
-  {% endif %}
-{% endwith %}
+{% extends "base.html" %}
+{% block content %}
 
-    <form method="POST" action="/signup">
-        <label>Name:</label><br>
-        <input type="text" name="name" required><br><br>
+<h2 class="mb-4">Signup</h2>
 
-        <label>Email:</label><br>
-        <input type="email" name="email" required><br><br>
+<form method="POST" action="/signup">
+    <div class="mb-3">
+        <label class="form-label">Name:</label>
+        <input type="text" class="form-control" name="name" required>
+    </div>
 
-        <label>Password:</label><br>
-        <input type="password" name="password" required><br><br>
+    <div class="mb-3">
+        <label class="form-label">Email:</label>
+        <input type="email" class="form-control" name="email" required>
+    </div>
 
-        <label>Role:</label><br>
-        <select name="role" required>
+    <div class="mb-3">
+        <label class="form-label">Password:</label>
+        <input type="password" class="form-control" name="password" required>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Signup as:</label>
+        <select class="form-select" name="role" id="role" required onchange="toggleCityField()">
+            <option value="">Select Role</option>
             <option value="traveler">Traveler</option>
             <option value="local">Local</option>
-        </select><br><br>
+        </select>
+    </div>
 
-        <button type="submit">Sign Up</button>
-    </form>
-</body>
-</html>
+    <div class="mb-3">
+        <label class="form-label">City:</label>
+        <select name="city" class="form-select">
+            <option value="">Select City</option>
+            <option value="Vadodara">Vadodara</option>
+            <option value="Ahmedabad">Ahmedabad</option>
+            <option value="Surat">Surat</option>
+            <option value="Rajkot">Rajkot</option>
+            <option value="Gandhinagar">Gandhinagar</option>
+            <option value="Mumbai">Mumbai</option>
+            <option value="Delhi">Delhi</option>
+            <option value="Bangalore">Bangalore</option>
+        </select>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Signup</button>
+</form>
+
+
+{% endblock %}

@@ -1,33 +1,93 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Local Inbox - Locallie</title>
-</head>
-<body>
-    <h2>Help Requests Inbox</h2>
+{% extends "base.html" %}
+{% block content %}
 
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <ul>
-        {% for msg in messages %}
-          <li>{{ msg }}</li>
-        {% endfor %}
-        </ul>
-      {% endif %}
-    {% endwith %}
+<h2 class="mb-3">Pending Help Requests</h2>
 
-    {% for req in requests %}
-        <div style="border: 1px solid black; margin: 10px; padding: 10px;">
-            <strong>From:</strong> {{ req[1] }}<br>
-            <strong>Query:</strong> {{ req[2] }}<br>
-            <strong>City:</strong> {{ req[3] }}<br>
-
-            <form method="POST" action="/local-inbox">
-                <input type="hidden" name="request_id" value="{{ req[0] }}">
-                <textarea name="reply" placeholder="Type your reply..." required></textarea><br>
-                <button type="submit">Send Reply</button>
-            </form>
-        </div>
+<!-- City filter dropdown -->
+<form method="GET" class="mb-3">
+  <label for="filter_city">Filter by city:</label>
+  <select name="filter_city" id="filter_city" onchange="this.form.submit()">
+    <option value="my_city" {% if selected_city == 'my_city' %}selected{% endif %}>My City</option>
+    <option value="all" {% if selected_city == 'all' %}selected{% endif %}>All Cities</option>
+    {% for city in all_cities %}
+      <option value="{{ city }}" {% if city == selected_city %}selected{% endif %}>{{ city }}</option>
     {% endfor %}
-</body>
-</html>
+  </select>
+</form>
+
+<table class="table table-bordered">
+  <thead class="table-dark">
+    <tr>
+      <th>ID</th>
+      <th>Tourist</th>
+      <th>Query</th>
+      <th>City</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in pending_requests %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.tourist_email }}</td>
+        <td>
+          {{ r.query }}
+          {% if replies_by_request[r.id] %}
+            <div style="margin-top: 5px;">
+              {% for reply in replies_by_request[r.id] %}
+                <div class="badge bg-success text-white mt-1">You replied: {{ reply }}</div><br>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </td>
+        <td>{{ r.city }}</td>
+        <td>
+          <form method="POST">
+            <input type="hidden" name="request_id" value="{{ r.id }}">
+            <textarea name="reply" placeholder="Write your reply..." required></textarea>
+            <button type="submit" class="btn btn-success btn-sm">Send Reply</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="text-center">No pending requests.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<hr>
+
+<h2 class="mb-3">Accepted Help Requests (Reply)</h2>
+
+<table class="table table-bordered">
+  <thead class="table-success">
+    <tr>
+      <th>ID</th>
+      <th>Tourist</th>
+      <th>Query</th>
+      <th>City</th>
+      <th>Your Reply</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in accepted_requests %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.tourist_email }}</td>
+        <td>{{ r.query }}</td>
+        <td>{{ r.city }}</td>
+        <td>
+          <form method="POST" action="/local-inbox">
+            <input type="hidden" name="request_id" value="{{ r.id }}">
+            <textarea name="reply" class="form-control mb-2" required></textarea>
+            <button type="submit" class="btn btn-success btn-sm">Send Reply</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="text-center">No accepted requests yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}
