@@ -1,15 +1,140 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Locallie - Home</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8" />
+  <title>Locallie - Connect with Locals</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      background: #f7f9fc;
+    }
+
+    .navbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 60px;
+      background-color: #ffffff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .logo {
+      font-size: 28px;
+      font-weight: bold;
+      color: #2563eb;
+    }
+
+    .nav-links {
+      list-style: none;
+      display: flex;
+      gap: 24px;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: #333;
+      font-weight: 500;
+    }
+
+    .auth-buttons .btn,
+    .auth-buttons .btn-outline {
+      padding: 10px 20px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .btn {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+    }
+
+    .btn-outline {
+      border: 2px solid #2563eb;
+      color: #2563eb;
+      background: transparent;
+    }
+
+    .hero {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 80px 60px;
+      background-color: #f7f9fc;
+    }
+
+    .hero-text {
+      max-width: 50%;
+    }
+
+    .hero-text h1 {
+      font-size: 3rem;
+      margin-bottom: 20px;
+      color: #1a202c;
+    }
+
+    .hero-text p {
+      font-size: 1.2rem;
+      color: #4a5568;
+      margin-bottom: 30px;
+    }
+
+    .hero-text .btn {
+      font-size: 1rem;
+      padding: 12px 28px;
+    }
+
+    .hero-img img {
+      width: 500px;
+      max-width: 100%;
+    }
+
+    @media (max-width: 768px) {
+      .hero {
+        flex-direction: column;
+        text-align: center;
+      }
+
+      .hero-text,
+      .hero-img {
+        max-width: 100%;
+      }
+
+      .hero-img {
+        margin-top: 30px;
+      }
+    }
+  </style>
 </head>
 <body>
-  {% include 'navbar.html' %}
+  <nav class="navbar">
+    <div class="logo">Locallie 🌍</div>
+    <ul class="nav-links">
+      <li><a href="{{ url_for('index') }}">Home</a>
+</li>
+      <li><a href="/how-it-works">How It Works</a></li>
+      <li><a href="/about">About</a></li>
+      <li><a href="/contact">Contact</a></li>
+    </ul>
+    <div class="auth-buttons">
+      <a href="/signin" class="btn-outline">Sign In</a>
+      <a href="/signup" class="btn">Get Started</a>
+    </div>
+  </nav>
 
-  <div class="container">
-    <h1>Welcome to Locallie</h1>
-    <p>Your city-based help system — powered by locals 🌍</p>
-  </div>
+  <section class="hero">
+    <div class="hero-text">
+      <h1>Explore smarter with Locallie 🌍</h1>
+      <p>Instant help from real locals. Safe, quick & community-powered support — wherever you travel.</p>
+      <a href="/signup" class="btn">Get Started</a>
+    </div>
+    <div class="hero-img">
+      <img src="{{ url_for('static', filename='images/hero.svg') }}" alt="Hero image">
+    </div>
+  </section>
 </body>
 </html>

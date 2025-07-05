@@ -1,76 +1,70 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-import mysql.connector
 from dotenv import load_dotenv
 from flask_mail import Mail, Message
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from flask import jsonify
+
 import os
 
 
+# ✅ Load environment variables first
 load_dotenv()
 
-
-
+# ✅ Create app instance
 app = Flask(__name__)
-
-
-conn = mysql.connector.connect(
-    host=os.getenv("DB_HOST"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),
-    database=os.getenv("DB_NAME")
-)
-
 app.secret_key = os.getenv("SECRET_KEY")
 
-cursor = conn.cursor()
-
+# ✅ Configure database
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DB_URI")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app)
+# ✅ Configure mail
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USE_SSL'] = False
+app.config['MAIL_USERNAME'] = os.getenv('EMAIL_USER')
+app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASS')
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv('EMAIL_USER')
 
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'        # Gmail SMTP server
-app.config['MAIL_PORT'] = 587                       # Gmail SMTP port for TLS
-app.config['MAIL_USE_TLS'] = True                   # Use TLS encryption
-app.config['MAIL_USE_SSL'] = False                  # Don't use SSL here since TLS is used
-app.config['MAIL_USERNAME'] = os.getenv('EMAIL_USER')  # Your email address (set in .env)
-app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASS')  # Your email password or app password
-app.config['MAIL_DEFAULT_SENDER'] = os.getenv('EMAIL_USER')  # Default sender email
+# ✅ Import and initialize extensions
+from extensions import db  # this should be: db = SQLAlchemy()
+db.init_app(app)
 
-mail = Mail(app)  # Initialize Flask-Mail with app
+mail = Mail(app)
+
+# ✅ Import models AFTER db is initialized to avoid circular import
+from models import User, HelpRequest, Feedback, Reply
+
+# ✅ Create tables once within context (optional)
+with app.app_context():
+    db.create_all()
+
+
 
 def send_email(to_email, subject, body):
-    smtp_server = 'smtp.gmail.com'
-    smtp_port = 587
-    sender_email = os.getenv('EMAIL_USER')  # your gmail or sender email
-    sender_password = os.getenv('EMAIL_PASS')  # your app password, no spaces!
-
-    msg = MIMEMultipart()
-    msg['From'] = sender_email
-    msg['To'] = to_email
-    msg['Subject'] = subject
-
-    msg.attach(MIMEText(body, 'plain'))
-
     try:
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()
-        server.login(sender_email, sender_password)
-        server.send_message(msg)
-        server.quit()
+        msg = Message(subject, recipients=[to_email])
+        msg.body = body
+        mail.send(msg)
         print(f"Email sent to {to_email}")
     except Exception as e:
         print(f"Failed to send email: {e}")
 
 
+@app.after_request
+def add_header(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "-1"
+    return response
+
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -79,40 +73,34 @@ def signup():
         email = request.form['email']
         password = request.form['password']
         role = request.form.get('role')
-
-        # Only fetch city if role is local
         city = request.form.get('city') if role == 'local' else None
 
-        hashed_password = generate_password_hash(password)
+        hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+
+
+        # Check if email already exists
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            flash("Email already exists.")
+            return redirect('/signup')
 
         try:
-            cursor.execute("""
-                INSERT INTO users (name, email, password, role, city) 
-                VALUES (%s, %s, %s, %s, %s)
-            """, (name, email, hashed_password, role, city))
-            conn.commit()
+            new_user = User(name=name, email=email, password=hashed_password, role=role, city=city)
+            db.session.add(new_user)
+            db.session.commit()
 
-            # ✅ Set session['city'] only for locals after role is known
             if role == 'local':
                 session['city'] = city
 
             flash("Signup successful! You can now log in.")
-            return redirect('/signin')  
-
-        except mysql.connector.IntegrityError as e:
-            print("DB Error (Integrity):", e)
-            flash("Email already exists.")
-            return redirect('/signup')
+            return redirect('/signin')
 
         except Exception as e:
-            print("DB Error (Unknown):", e)
+            print("DB Error:", e)
             flash("Something went wrong.")
             return redirect('/signup')
 
     return render_template('signup.html')
-
-
-
 
 
 @app.route("/signin", methods=["GET", "POST"])
@@ -121,34 +109,25 @@ def signin():
         email = request.form['email']
         password = request.form['password']
 
-        cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
-        user = cursor.fetchone()
+        # Fetch user using SQLAlchemy
+        user = User.query.filter_by(email=email).first()
 
         if user:
-            db_password = user[3]  # assuming id, name, email, password, role
-            if check_password_hash(db_password, password):
+            if check_password_hash(user.password, password):
                 # Set session
-                session['user_id'] = user[0]
-                session['name'] = user[1]
-                session['email'] = user[2]
-                session['role'] = user[4]
+                session['user_id'] = user.id
+                session['name'] = user.name
+                session['email'] = user.email
+                session['role'] = user.role
+
+                # Save city in session for locals
+                if user.role == 'local' and user.city:
+                    session['city'] = user.city
 
                 flash("Login successful!")
 
-                if user[4] == 'local':
-                  
-             # fetch city of the local from DB
-                  cursor.execute("SELECT city FROM users WHERE id = %s", (user[0],))
-                  city_row = cursor.fetchone()
-                  if city_row:
-                   session['city'] = city_row[0]
-
-
                 # Redirect by role
-                if user[4] == 'traveler':
-                    return redirect('/tourist')
-                else:
-                    return redirect('/local')
+                return redirect('/tourist') if user.role == 'traveler' else redirect('/local')
             else:
                 flash("Incorrect password.")
                 return redirect('/signin')
@@ -158,12 +137,15 @@ def signin():
 
     return render_template("signin.html")
 
+
 @app.route('/tourist')
 def tourist_dashboard():
+    # Ensure user is logged in
     if 'user_id' not in session:
         flash("Please log in to continue.")
         return redirect(url_for('signin'))
 
+    # Ensure only travelers can access this route
     if session.get('role') != 'traveler':
         flash("Access denied: Only travelers allowed.")
         return redirect(url_for('signin'))
@@ -173,10 +155,12 @@ def tourist_dashboard():
 
 @app.route('/local')
 def local_dashboard():
+    # Ensure user is logged in
     if 'user_id' not in session:
         flash("Please log in to continue.")
         return redirect(url_for('signin'))
 
+    # Ensure only locals can access this route
     if session.get('role') != 'local':
         flash("Access denied: Only locals allowed.")
         return redirect(url_for('signin'))
@@ -184,164 +168,228 @@ def local_dashboard():
     return render_template('local_dashboard.html')
 
 
+from models import HelpRequest, Reply, User
+from sqlalchemy import and_
 
 @app.route('/profile')
 def profile():
     if 'user_id' not in session:
         flash("Please log in first.")
-        return redirect('/login')
+        return redirect(url_for('signin'))
 
     user_id = session['user_id']
-    user_name = session['name']
-    user_email = session['email']
-    user_role = session['role']
+    user = User.query.get(user_id)
 
-    # Fetch help requests made by this user
-    cursor.execute("""
-        SELECT hr.query, hr.city, hr.status, hr.id
-        FROM help_request hr
-        WHERE hr.user_id = %s
-        ORDER BY hr.created_at DESC
-    """, (user_id,))
-    help_requests = cursor.fetchall()
+    if not user:
+        flash("User not found.")
+        return redirect(url_for('signin'))
 
-    # Fetch replies to their help requests (if any)
+    # ✅ Do NOT overwrite HelpRequest model name
+    user_requests = db.session.query(HelpRequest) \
+        .filter(HelpRequest.user_id == user_id) \
+        .order_by(HelpRequest.created_at.desc()) \
+        .all()
+
+    # ✅ Replies dictionary per request ID
     replies = {}
-    for hr in help_requests:
-        request_id = hr[3]  # id is 4th field
-        cursor.execute("""
-            SELECT u.name, r.reply, r.created_at
-            FROM help_replies r
-            JOIN users u ON r.local_id = u.id
-            WHERE r.request_id = %s
-        """, (request_id,))
-        replies[request_id] = cursor.fetchall()
+    for req in user_requests:
+        replies[req.id] = db.session.query(Reply) \
+            .filter(Reply.help_request_id == req.id) \
+            .join(User, Reply.local_id == User.id) \
+            .add_columns(User.name.label("local_name"), Reply.message, Reply.created_at) \
+            .all()
 
-    return render_template('profile.html', name=user_name, email=user_email, role=user_role, help_requests=help_requests, replies=replies)
+    return render_template(
+        'profile.html',
+        name=user.name,
+        email=user.email,
+        role=user.role,
+        help_requests=user_requests,
+        replies=replies
+    )
 
 
-
+from models import HelpRequest  # make sure it's defined
+from datetime import datetime
 
 @app.route('/help-request', methods=['GET', 'POST'])
 def help_request():
-    if 'user_id' not in session or session['role'] != 'traveler':
+    # Access control
+    if 'user_id' not in session or session.get('role') != 'traveler':
         flash("Access denied.")
-        return redirect('/login')
+        return redirect(url_for('signin'))
 
     if request.method == 'POST':
-        query = request.form['query']
+        query_text = request.form['query']  # 🟢 match column name
         city = request.form['city']
-        user_id = session['user_id']
+        email_alert = 'email_alert' in request.form  # checkbox
 
-        cursor.execute("INSERT INTO help_request (user_id, query, city) VALUES (%s, %s, %s)", (user_id, query, city))
-        conn.commit()
-        flash("Help request submitted!")
-        return redirect('/tourist')
+        new_request = HelpRequest(
+            user_id=session['user_id'],
+            query_text=query_text,  # 🟢 corrected here
+            city=city,
+            email_alert=email_alert,
+            created_at=datetime.utcnow()
+        )
+
+        try:
+            db.session.add(new_request)
+            db.session.commit()
+            flash("Help request submitted!")
+            return redirect('/tourist')
+        except Exception as e:
+            db.session.rollback()
+            print("Error while creating help request:", e)
+            flash("Something went wrong. Please try again.")
 
     return render_template('help_form.html')
+
+
+
+from sqlalchemy import and_
+
+from sqlalchemy import and_
+
+from flask import render_template, request, redirect, url_for, flash, session
+from sqlalchemy import and_
+from models import User, HelpRequest, Reply
+from extensions import db
+from flask_mail import Message
 
 @app.route('/local-inbox', methods=['GET', 'POST'])
 def local_inbox():
     if 'user_id' not in session or session.get('role') != 'local':
         flash("Access denied.")
-        return redirect('/signin')
+        return redirect(url_for('signin'))
 
     local_id = session['user_id']
+    local_user = db.session.query(User).get(local_id)
+    local_city = local_user.city
 
-    cursor = conn.cursor(dictionary=True)
-    # Fetch local's city
-    cursor.execute("SELECT city FROM users WHERE id = %s", (local_id,))
-    local_city = cursor.fetchone()['city']
+    # Get city from form (POST) or query param (GET)
+    selected_city = request.form.get('filter_city') or request.args.get('filter_city') or 'my_city'
 
-    # Determine city filter
-    selected_city = request.args.get('filter_city')
-    if selected_city == 'all':
-        city_condition = ""
-        city_params = ()
-    elif selected_city == 'my_city' or not selected_city:
-        city_condition = "AND hr.city = %s"
-        city_params = (local_city,)
-    else:
-        city_condition = "AND hr.city = %s"
-        city_params = (selected_city,)
-
+    # ✅ Handle POST (reply submission)
     if request.method == 'POST':
-        request_id = request.form['request_id']
+        request_id = request.form.get('request_id')
         reply_text = request.form.get('reply')
 
-        if reply_text:
-            # Insert reply
-            cursor.execute("""
-                INSERT INTO help_replies (request_id, local_id, reply) 
-                VALUES (%s, %s, %s)
-            """, (request_id, local_id, reply_text))
-            conn.commit()
+        if reply_text and request_id:
+            reply = Reply(help_request_id=request_id, local_id=local_id, message=reply_text)
+            db.session.add(reply)
 
-            # Fetch tourist email and is_verified to send notification if verified
-            cursor.execute("""
-                SELECT u.email, u.is_verified
-                FROM help_request hr
-                JOIN users u ON hr.user_id = u.id
-                WHERE hr.id = %s
-            """, (request_id,))
-            tourist = cursor.fetchone()
+            req = db.session.query(HelpRequest).get(request_id)
+            if req:
+                req.status = 'Replied'
+                tourist = db.session.query(User).get(req.user_id)
 
-            if tourist and tourist['is_verified']:  # Send email only if verified
-                msg = Message(
-                    subject="New reply on your Locallie help request!",
-                    recipients=[tourist['email']],
-                    body=f"Hi there! Your help request has received a reply:\n\n'{reply_text}'\n\nPlease check your Locallie dashboard."
-                )
-                mail.send(msg)
+                if tourist and getattr(tourist, 'is_verified', True) and req.email_alert:
+                    msg = Message(
+                        subject="New reply on your Locallie help request!",
+                        recipients=[tourist.email],
+                        body=f"Hi there! Your help request has received a reply:\n\n'{reply_text}'\n\nPlease check your Locallie dashboard."
+                    )
+                    try:
+                        mail.send(msg)
+                    except Exception as e:
+                        print("Email send error:", e)
 
-            flash("Reply sent and tourist notified (if verified)!")
+            db.session.commit()
+            flash("✅ Reply sent and tourist notified!")
         else:
-            flash("Reply cannot be empty!")
+            flash("❌ Reply cannot be empty!")
 
-        return redirect('/local-inbox')
+        return redirect(url_for('local_inbox', filter_city=selected_city))
 
-    # Fetch pending requests with replies (so they don’t disappear)
-    query = f"""
-        SELECT hr.id, hr.query, hr.city, u.email AS tourist_email
-        FROM help_request hr
-        JOIN users u ON hr.user_id = u.id
-        WHERE hr.status = 'Pending' {city_condition}
-        ORDER BY hr.created_at DESC
-    """
-    cursor.execute(query, city_params)
-    pending_requests = cursor.fetchall()
+    # ✅ Filtering Help Requests
+    if selected_city == 'all':
+        filtered_requests = db.session.query(HelpRequest).filter(
+            HelpRequest.status.in_(['Pending', 'Replied'])
+        )
+    elif selected_city == 'my_city':
+        filtered_requests = db.session.query(HelpRequest).filter(
+            and_(
+                HelpRequest.status.in_(['Pending', 'Replied']),
+                HelpRequest.city == local_city
+            )
+        )
+    else:
+        filtered_requests = db.session.query(HelpRequest).filter(
+            and_(
+                HelpRequest.status.in_(['Pending', 'Replied']),
+                HelpRequest.city == selected_city
+            )
+        )
 
-    # Fetch local’s replies for each pending request
-    all_request_ids = [r['id'] for r in pending_requests]
+    pending_requests = filtered_requests.order_by(HelpRequest.created_at.desc()).all()
+
+    # ✅ Replies per request
+    all_request_ids = [r.id for r in pending_requests]
     replies_by_request = {}
 
     if all_request_ids:
-        format_strings = ','.join(['%s'] * len(all_request_ids))
-        cursor.execute(f"""
-            SELECT request_id, reply
-            FROM help_replies
-            WHERE local_id = %s AND request_id IN ({format_strings})
-        """, (local_id, *all_request_ids))
+        replies = db.session.query(Reply).filter(
+            Reply.local_id == local_id,
+            Reply.help_request_id.in_(all_request_ids)
+        ).all()
 
-        for row in cursor.fetchall():
-            rid = row['request_id']
-            if rid not in replies_by_request:
-                replies_by_request[rid] = []
-            replies_by_request[rid].append(row['reply'])
+        for r in replies:
+            replies_by_request.setdefault(r.help_request_id, []).append(r.message)
 
-    # Get city list for dropdown
-    cursor.execute("SELECT DISTINCT city FROM help_request")
-    all_cities = [row['city'] for row in cursor.fetchall()]
+    # ✅ All city options for dropdown
+    all_cities = [c[0] for c in db.session.query(HelpRequest.city).distinct().all() if c[0]]
 
-    cursor.close()
     return render_template(
         'local_inbox.html',
         pending_requests=pending_requests,
-        selected_city=selected_city or 'my_city',
+        selected_city=selected_city,
         all_cities=all_cities,
         replies_by_request=replies_by_request
     )
 
+
+
+@app.route('/submit_reply', methods=['POST'])
+def submit_reply():
+    if 'user_id' not in session or session.get('role') != 'local':
+        return jsonify({'status': 'error', 'message': 'Unauthorized access'})
+
+    data = request.get_json()
+    request_id = data.get('request_id')
+    reply_text = data.get('reply')
+    local_id = session['user_id']
+
+    if not reply_text:
+        return jsonify({'status': 'error', 'message': 'Reply cannot be empty'})
+
+    # Insert the reply
+    reply = Reply(
+        help_request_id=request_id,
+        local_id=local_id,
+        message=reply_text
+    )
+    db.session.add(reply)
+
+    # Update status
+    req = HelpRequest.query.get(request_id)
+    if req:
+        req.status = 'Replied'
+
+        # Optional: Notify tourist
+        tourist = User.query.get(req.user_id)
+        if tourist and getattr(tourist, 'is_verified', True) and req.email_alert:
+            try:
+                msg = Message(
+                    subject="New reply on your Locallie help request!",
+                    recipients=[tourist.email],
+                    body=f"Hi there! Your help request has received a reply:\n\n'{reply_text}'\n\nPlease check your Locallie dashboard."
+                )
+                mail.send(msg)
+            except Exception as e:
+                print("Email error:", e)
+
+    db.session.commit()
+    return jsonify({'status': 'success'})
 
 
 
@@ -353,128 +401,173 @@ def local_inbox():
 def about():
     return render_template('about.html')
 
+
 @app.route('/contact')
 def contact():
     return render_template('contact.html')
 
-from flask import request, redirect, render_template, session
-from datetime import datetime
-import mysql.connector
+
+from models import Feedback  # make sure this model exists
 
 @app.route('/send_feedback', methods=['GET', 'POST'])
 def send_feedback():
     if 'user_id' not in session:
-        return redirect('/signin')  # Ensure user is logged in
+        return redirect(url_for('signin'))  # secure redirect
 
     if request.method == 'POST':
         user_id = session['user_id']
-        user_role = session['role']  # Make sure you store role in session on login
+        user_role = session.get('role')
         subject = request.form['subject']
         message = request.form['message']
 
-        cursor = conn.cursor()
-        query = "INSERT INTO platform_feedback (user_id, user_role, subject, message) VALUES (%s, %s, %s, %s)"
-        cursor.execute(query, (user_id, user_role, subject, message))
-        conn.commit()
-        cursor.close()
+        try:
+            new_feedback = Feedback(
+                user_id=user_id,
+                user_role=user_role,
+                subject=subject,
+                message=message
+            )
+            db.session.add(new_feedback)
+            db.session.commit()
+            flash("Feedback sent to admin. Thank you!")
+            return redirect(url_for('send_feedback'))  # Redirect to avoid resubmission
 
-        return "Feedback sent to admin. Thank you!"
+        except Exception as e:
+            db.session.rollback()
+            print("Feedback insert error:", e)
+            flash("Something went wrong. Please try again.")
 
     return render_template('send_feedback.html')
+
+
+from models import Feedback
 
 @app.route('/admin/view_feedback')
 def admin_view_feedback():
     if not session.get('admin_logged_in'):
-        return redirect('/admin_login')
+        return redirect(url_for('admin_login'))
 
-    status_filter = request.args.get('status')  # optional query param
+    status_filter = request.args.get('status')
 
-    cursor = conn.cursor(dictionary=True)
-    
     if status_filter in ['Pending', 'Resolved']:
-        cursor.execute("SELECT * FROM platform_feedback WHERE status = %s ORDER BY timestamp DESC", (status_filter,))
+        feedbacks = Feedback.query.filter_by(status=status_filter).order_by(Feedback.created_at.desc()).all()
     else:
-        cursor.execute("SELECT * FROM platform_feedback ORDER BY timestamp DESC")
+        feedbacks = Feedback.query.order_by(Feedback.created_at.desc()).all()
 
-    feedbacks = cursor.fetchall()
-    cursor.close()
+    return render_template(
+        'admin_view_feedback.html',
+        feedbacks=feedbacks,
+        current_filter=status_filter
+    )
 
-    return render_template('admin_view_feedback.html', feedbacks=feedbacks, current_filter=status_filter)
 
+from models import Feedback
 
 @app.route('/admin/resolve_feedback/<int:feedback_id>')
 def resolve_feedback(feedback_id):
-
     if not session.get('admin_logged_in'):
-        return redirect('/admin_login')
-    
+        return redirect(url_for('admin_login'))
 
-    cursor = conn.cursor()
-    cursor.execute("UPDATE platform_feedback SET status = 'Resolved' WHERE id = %s", (feedback_id,))
-    conn.commit()
-    cursor.close()
-    return redirect('/admin/view_feedback')
+    feedback = Feedback.query.get(feedback_id)
+    if feedback:
+        feedback.status = 'Resolved'
+        try:
+            db.session.commit()
+            flash("Feedback marked as resolved.")
+        except Exception as e:
+            db.session.rollback()
+            print("DB error:", e)
+            flash("Could not resolve feedback. Please try again.")
+    else:
+        flash("Feedback not found.")
+
+    return redirect(url_for('admin_view_feedback'))
+
+
+from models import HelpRequest, User
+from sqlalchemy import func
 
 @app.route('/admin/help_requests')
 def admin_help_requests():
     if not session.get('admin_logged_in'):
-        return redirect('/admin_login')
+        return redirect(url_for('admin_login'))
 
     status_filter = request.args.get('status')
-    cursor = conn.cursor(dictionary=True)
 
-    base_query = """
-        SELECT hr.*, 
-               t.email AS tourist_email,
-               l.email AS local_email
-        FROM help_request hr
-        LEFT JOIN users t ON hr.user_id = t.id
-        LEFT JOIN users l ON hr.accepted_by = l.id
-    """
+    # Base query with joins
+    query = db.session.query(
+        HelpRequest,
+        User.email.label('tourist_email'),
+        db.aliased(User).email.label('local_email')
+    ).outerjoin(User, HelpRequest.user_id == User.id) \
+     .outerjoin(db.aliased(User), HelpRequest.accepted_by == db.aliased(User).id)
 
-    count_query = "SELECT status, COUNT(*) as count FROM help_request GROUP BY status"
-
-    # Filtered query
+    # Filter by status if valid
     if status_filter in ['Pending', 'Accepted', 'Replied']:
-        base_query += " WHERE hr.status = %s ORDER BY hr.created_at DESC"
-        cursor.execute(base_query, (status_filter,))
-    else:
-        base_query += " ORDER BY hr.created_at DESC"
-        cursor.execute(base_query)
+        query = query.filter(HelpRequest.status == status_filter)
 
-    help_data = cursor.fetchall()
+    query = query.order_by(HelpRequest.created_at.desc())
+    results = query.all()
 
-    # Get counts by status
-    cursor.execute(count_query)
-    counts = {row['status']: row['count'] for row in cursor.fetchall()}
-    cursor.close()
+    # Convert result into a usable format for Jinja
+    help_data = []
+    for hr, tourist_email, local_email in results:
+        help_data.append({
+            'id': hr.id,
+            'query': hr.query,
+            'city': hr.city,
+            'status': hr.status,
+            'created_at': hr.created_at,
+            'email_alert': hr.email_alert,
+            'tourist_email': tourist_email,
+            'local_email': local_email
+        })
 
-    return render_template('admin_help_requests.html', help_data=help_data, current_filter=status_filter, counts=counts)
+    # Count help requests grouped by status
+    counts_raw = db.session.query(
+        HelpRequest.status,
+        func.count().label('count')
+    ).group_by(HelpRequest.status).all()
 
+    counts = {status: count for status, count in counts_raw}
+
+    return render_template(
+        'admin_help_requests.html',
+        help_data=help_data,
+        current_filter=status_filter,
+        counts=counts
+    )
+
+
+from models import HelpRequest
 
 @app.route('/accept_request/<int:request_id>', methods=['POST'])
 def accept_request(request_id):
     if 'user_id' not in session or session.get('role') != 'local':
         flash("Login required.")
-        return redirect('/signin')
+        return redirect(url_for('signin'))
 
     local_id = session['user_id']
-    cursor = conn.cursor()
 
-    # Prevent re-accepting already accepted requests
-    cursor.execute("""
-        UPDATE help_request
-        SET accepted_by = %s, status = 'Accepted'
-        WHERE id = %s AND accepted_by IS NULL
-    """, (local_id, request_id))
+    # Fetch and check if request is not already accepted
+    help_request = HelpRequest.query.get(request_id)
+    if not help_request:
+        flash("Help request not found.")
+    elif help_request.accepted_by:
+        flash("This request is already accepted by another local.")
+    else:
+        help_request.accepted_by = local_id
+        help_request.status = 'Accepted'
 
-    conn.commit()
-    cursor.close()
-    flash("You have accepted the request.")
-    return redirect('/local-inbox')
+        try:
+            db.session.commit()
+            flash("You have accepted the request.")
+        except Exception as e:
+            db.session.rollback()
+            print("Error accepting request:", e)
+            flash("Something went wrong. Try again.")
 
-
-
+    return redirect(url_for('local_inbox'))
 
 
 @app.route('/how-it-works')
@@ -493,39 +586,79 @@ def admin_login():
         username = request.form['username']
         password = request.form['password']
         
-        # Simple hardcoded admin login
+        # 🔐 Simple hardcoded admin login
         if username == 'tirth' and password == '9723':
             session['admin_logged_in'] = True
-            return redirect('/admin_dashboard')
+            flash("Admin login successful.")
+            return redirect(url_for('admin_dashboard'))
         else:
-            return "Invalid credentials"
+            flash("Invalid credentials. Try again.")
 
     return render_template('admin_login.html')
 
 
+from models import Feedback
+from sqlalchemy import func
+
 @app.route('/admin_dashboard')
 def admin_dashboard():
     if not session.get('admin_logged_in'):
-        return redirect('/admin_login')
+        return redirect(url_for('admin_login'))
 
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM platform_feedback")
-    total_feedback = cursor.fetchone()[0]
+    total_feedback = db.session.query(func.count(Feedback.id)).scalar()
 
-    cursor.execute("SELECT COUNT(*) FROM platform_feedback WHERE status='Resolved'")
-    resolved = cursor.fetchone()[0]
+    resolved = db.session.query(func.count(Feedback.id))\
+        .filter(Feedback.status == 'Resolved').scalar()
 
-    cursor.execute("SELECT COUNT(*) FROM platform_feedback WHERE status='Pending'")
-    pending = cursor.fetchone()[0]
+    pending = db.session.query(func.count(Feedback.id))\
+        .filter(Feedback.status == 'Pending').scalar()
 
-    cursor.close()
-    return render_template('admin_dashboard.html', total=total_feedback, resolved=resolved, pending=pending)
+    return render_template(
+        'admin_dashboard.html',
+        total=total_feedback,
+        resolved=resolved,
+        pending=pending
+    )
+
 
 @app.route('/admin_logout')
 def admin_logout():
     session.pop('admin_logged_in', None)
     return redirect('/admin_login')
 
+
+@app.route("/test-mail")
+def test_mail():
+    if 'user_id' not in session:
+        return "❌ Login required to test mail."
+
+    user_email = session.get('email') or "fallback@example.com"
+    user_name = session.get('name', 'User')
+
+    msg = Message(
+        subject="📧 Test Email from Locallie",
+        recipients=[user_email],
+        body=f"""
+Hi {user_name}! ✅
+
+This is a test email from Locallie.
+
+If you're reading this, your SMTP (Gmail) configuration is working properly!
+
+– Locallie Team
+"""
+    )
+
+    try:
+        mail.send(msg)
+        return f"✅ Test email sent to {user_email}! Check your inbox or spam folder."
+    except Exception as e:
+        print("SMTP Error:", e)
+        return "❌ Failed to send test email. Please check SMTP credentials in .env and Gmail app access settings."
+
+
+with app.app_context():
+    db.create_all()
 
 
 if __name__ == "__main__":

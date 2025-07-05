@@ -10,6 +10,23 @@
     <p><strong>Email:</strong> {{ email }}</p>
 
     <h3>Help Request History</h3>
+    {% if role == 'traveler' %}
+    <h3>Your Help Requests</h3>
+    {% for req in help_requests %}
+        <div>
+            <strong>{{ req.city }} | {{ req.status }}</strong><br>
+            {{ req.query_text }}
+            <ul>
+            {% for reply in replies.get(req.id, []) %}
+                <li><b>{{ reply.name }}:</b> {{ reply.message }} ({{ reply.created_at }})</li>
+            {% endfor %}
+            </ul>
+        </div>
+    {% endfor %}
+{% else %}
+    <p>You’re logged in as a Local. You can help tourists via the inbox.</p>
+{% endif %}
+
 
     {% if help_requests %}
         {% for hr in help_requests %}

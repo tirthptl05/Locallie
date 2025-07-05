@@ -42,7 +42,8 @@
         <tr>
             <td>{{ r.id }}</td>
             <td>{{ r.tourist_email or 'User ID ' ~ r.user_id }}</td>
-            <td>{{ r.query }}</td>
+            <td>{{ r.query_text }}
+</td>
             <td>{{ r.city }}</td>
             <td>
                 {% if r.status == 'Pending' %}
