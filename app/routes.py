@@ -1,3 +1,6 @@
+from flask import Blueprint
+main = Blueprint('main', __name__)
+
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -6,7 +9,6 @@ from flask_mail import Mail, Message
 from flask import jsonify
 
 import os
-
 
 # ✅ Load environment variables first
 load_dotenv()
@@ -29,18 +31,12 @@ app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASS')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('EMAIL_USER')
 
 # ✅ Import and initialize extensions
-from extensions import db  # this should be: db = SQLAlchemy()
-db.init_app(app)
+from app.extensions import db  # this should be: db = SQLAlchemy()
 
 mail = Mail(app)
 
 # ✅ Import models AFTER db is initialized to avoid circular import
-from models import User, HelpRequest, Feedback, Reply
-
-# ✅ Create tables once within context (optional)
-with app.app_context():
-    db.create_all()
-
+from app.models import User, HelpRequest, Feedback, Reply
 
 
 def send_email(to_email, subject, body):
@@ -53,7 +49,7 @@ def send_email(to_email, subject, body):
         print(f"Failed to send email: {e}")
 
 
-@app.after_request
+@main.after_request
 def add_header(response):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -61,12 +57,12 @@ def add_header(response):
     return response
 
 
-@app.route("/")
+@main.route("/")
 def index():
     return render_template("index.html")
 
 
-@app.route('/signup', methods=['GET', 'POST'])
+@main.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
         name = request.form['name']
@@ -103,7 +99,7 @@ def signup():
     return render_template('signup.html')
 
 
-@app.route("/signin", methods=["GET", "POST"])
+@main.route("/signin", methods=["GET", "POST"])
 def signin():
     if request.method == "POST":
         email = request.form['email']
@@ -138,51 +134,51 @@ def signin():
     return render_template("signin.html")
 
 
-@app.route('/tourist')
+@main.route('/tourist')
 def tourist_dashboard():
     # Ensure user is logged in
     if 'user_id' not in session:
         flash("Please log in to continue.")
-        return redirect(url_for('signin'))
+        return redirect(url_for('main.signin'))
 
     # Ensure only travelers can access this route
     if session.get('role') != 'traveler':
         flash("Access denied: Only travelers allowed.")
-        return redirect(url_for('signin'))
+        return redirect(url_for('main.signin'))
 
     return render_template('tourist_dashboard.html')
 
 
-@app.route('/local')
+@main.route('/local')
 def local_dashboard():
     # Ensure user is logged in
     if 'user_id' not in session:
         flash("Please log in to continue.")
-        return redirect(url_for('signin'))
+        return redirect(url_for('main.signin'))
 
     # Ensure only locals can access this route
     if session.get('role') != 'local':
         flash("Access denied: Only locals allowed.")
-        return redirect(url_for('signin'))
+        return redirect(url_for('main.signin'))
 
     return render_template('local_dashboard.html')
 
 
-from models import HelpRequest, Reply, User
+from app.models import HelpRequest, Reply, User
 from sqlalchemy import and_
 
-@app.route('/profile')
+@main.route('/profile')
 def profile():
     if 'user_id' not in session:
         flash("Please log in first.")
-        return redirect(url_for('signin'))
+        return redirect(url_for('main.signin'))
 
     user_id = session['user_id']
     user = User.query.get(user_id)
 
     if not user:
         flash("User not found.")
-        return redirect(url_for('signin'))
+        return redirect(url_for('main.signin'))
 
     # ✅ Do NOT overwrite HelpRequest model name
     user_requests = db.session.query(HelpRequest) \
@@ -209,15 +205,15 @@ def profile():
     )
 
 
-from models import HelpRequest  # make sure it's defined
+from app.models import HelpRequest  # make sure it's defined
 from datetime import datetime
 
-@app.route('/help-request', methods=['GET', 'POST'])
+@main.route('/help-request', methods=['GET', 'POST'])
 def help_request():
     # Access control
     if 'user_id' not in session or session.get('role') != 'traveler':
         flash("Access denied.")
-        return redirect(url_for('signin'))
+        return redirect(url_for('main.signin'))
 
     if request.method == 'POST':
         query_text = request.form['query']  # 🟢 match column name
@@ -252,15 +248,15 @@ from sqlalchemy import and_
 
 from flask import render_template, request, redirect, url_for, flash, session
 from sqlalchemy import and_
-from models import User, HelpRequest, Reply
-from extensions import db
+from app.models import User, HelpRequest, Reply
+from app.extensions import db
 from flask_mail import Message
 
-@app.route('/local-inbox', methods=['GET', 'POST'])
+@main.route('/local-inbox', methods=['GET', 'POST'])
 def local_inbox():
     if 'user_id' not in session or session.get('role') != 'local':
         flash("Access denied.")
-        return redirect(url_for('signin'))
+        return redirect(url_for('main.signin'))
 
     local_id = session['user_id']
     local_user = db.session.query(User).get(local_id)
@@ -299,7 +295,7 @@ def local_inbox():
         else:
             flash("❌ Reply cannot be empty!")
 
-        return redirect(url_for('local_inbox', filter_city=selected_city))
+        return redirect(url_for('main.local_inbox', filter_city=selected_city))
 
     # ✅ Filtering Help Requests
     if selected_city == 'all':
@@ -349,7 +345,7 @@ def local_inbox():
 
 
 
-@app.route('/submit_reply', methods=['POST'])
+@main.route('/submit_reply', methods=['POST'])
 def submit_reply():
     if 'user_id' not in session or session.get('role') != 'local':
         return jsonify({'status': 'error', 'message': 'Unauthorized access'})
@@ -397,22 +393,22 @@ def submit_reply():
 
 
 
-@app.route('/about')
+@main.route('/about')
 def about():
     return render_template('about.html')
 
 
-@app.route('/contact')
+@main.route('/contact')
 def contact():
     return render_template('contact.html')
 
 
-from models import Feedback  # make sure this model exists
+from app.models import Feedback  # make sure this model exists
 
-@app.route('/send_feedback', methods=['GET', 'POST'])
+@main.route('/send_feedback', methods=['GET', 'POST'])
 def send_feedback():
     if 'user_id' not in session:
-        return redirect(url_for('signin'))  # secure redirect
+        return redirect(url_for('main.signin'))  # secure redirect
 
     if request.method == 'POST':
         user_id = session['user_id']
@@ -430,7 +426,7 @@ def send_feedback():
             db.session.add(new_feedback)
             db.session.commit()
             flash("Feedback sent to admin. Thank you!")
-            return redirect(url_for('send_feedback'))  # Redirect to avoid resubmission
+            return redirect(url_for('main.send_feedback'))  # Redirect to avoid resubmission
 
         except Exception as e:
             db.session.rollback()
@@ -440,19 +436,19 @@ def send_feedback():
     return render_template('send_feedback.html')
 
 
-from models import Feedback
+from app.models import Feedback
 
-@app.route('/admin/view_feedback')
+@main.route('/admin/view_feedback')
 def admin_view_feedback():
     if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
+        return redirect(url_for('main.admin_login'))
 
     status_filter = request.args.get('status')
 
     if status_filter in ['Pending', 'Resolved']:
-        feedbacks = Feedback.query.filter_by(status=status_filter).order_by(Feedback.created_at.desc()).all()
+        feedbacks = Feedback.query.filter_by(status=status_filter).order_by(Feedback.timestamp.desc()).all()
     else:
-        feedbacks = Feedback.query.order_by(Feedback.created_at.desc()).all()
+        feedbacks = Feedback.query.order_by(Feedback.timestamp.desc()).all()
 
     return render_template(
         'admin_view_feedback.html',
@@ -461,12 +457,12 @@ def admin_view_feedback():
     )
 
 
-from models import Feedback
+from app.models import Feedback
 
-@app.route('/admin/resolve_feedback/<int:feedback_id>')
+@main.route('/admin/resolve_feedback/<int:feedback_id>')
 def resolve_feedback(feedback_id):
     if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
+        return redirect(url_for('main.admin_login'))
 
     feedback = Feedback.query.get(feedback_id)
     if feedback:
@@ -481,49 +477,47 @@ def resolve_feedback(feedback_id):
     else:
         flash("Feedback not found.")
 
-    return redirect(url_for('admin_view_feedback'))
+    return redirect(url_for('main.admin_view_feedback'))
 
 
-from models import HelpRequest, User
+from app.models import HelpRequest, User
 from sqlalchemy import func
 
-@app.route('/admin/help_requests')
+from sqlalchemy.orm import aliased
+from sqlalchemy import func
+
+@main.route('/admin/help_requests')
 def admin_help_requests():
     if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
+        return redirect(url_for('main.admin_login'))
 
     status_filter = request.args.get('status')
 
-    # Base query with joins
+    # Get help requests and join user info (email etc.)
     query = db.session.query(
         HelpRequest,
-        User.email.label('tourist_email'),
-        db.aliased(User).email.label('local_email')
-    ).outerjoin(User, HelpRequest.user_id == User.id) \
-     .outerjoin(db.aliased(User), HelpRequest.accepted_by == db.aliased(User).id)
+        User.email.label('tourist_email')
+    ).outerjoin(User, HelpRequest.user_id == User.id)
 
-    # Filter by status if valid
     if status_filter in ['Pending', 'Accepted', 'Replied']:
         query = query.filter(HelpRequest.status == status_filter)
 
     query = query.order_by(HelpRequest.created_at.desc())
     results = query.all()
 
-    # Convert result into a usable format for Jinja
     help_data = []
-    for hr, tourist_email, local_email in results:
+    for hr, tourist_email in results:
         help_data.append({
             'id': hr.id,
-            'query': hr.query,
+            'query': hr.query_text,  # ✅ use correct field name
             'city': hr.city,
             'status': hr.status,
             'created_at': hr.created_at,
             'email_alert': hr.email_alert,
-            'tourist_email': tourist_email,
-            'local_email': local_email
+            'tourist_email': tourist_email
+            # ❌ remove local_email / accepted_by
         })
 
-    # Count help requests grouped by status
     counts_raw = db.session.query(
         HelpRequest.status,
         func.count().label('count')
@@ -539,13 +533,15 @@ def admin_help_requests():
     )
 
 
-from models import HelpRequest
 
-@app.route('/accept_request/<int:request_id>', methods=['POST'])
+
+from app.models import HelpRequest
+
+@main.route('/accept_request/<int:request_id>', methods=['POST'])
 def accept_request(request_id):
     if 'user_id' not in session or session.get('role') != 'local':
         flash("Login required.")
-        return redirect(url_for('signin'))
+        return redirect(url_for('main.signin'))
 
     local_id = session['user_id']
 
@@ -567,20 +563,20 @@ def accept_request(request_id):
             print("Error accepting request:", e)
             flash("Something went wrong. Try again.")
 
-    return redirect(url_for('local_inbox'))
+    return redirect(url_for('main.local_inbox'))
 
 
-@app.route('/how-it-works')
+@main.route('/how-it-works')
 def how_it_works():
     return render_template('how_it_works.html')
 
-@app.route('/logout')
+@main.route('/logout')
 def logout():
     session.clear()
     flash("Logged out successfully.")
-    return redirect(url_for('signin'))
+    return redirect(url_for('main.signin'))
 
-@app.route('/admin_login', methods=['GET', 'POST'])
+@main.route('/admin_login', methods=['GET', 'POST'])
 def admin_login():
     if request.method == 'POST':
         username = request.form['username']
@@ -590,20 +586,20 @@ def admin_login():
         if username == 'tirth' and password == '9723':
             session['admin_logged_in'] = True
             flash("Admin login successful.")
-            return redirect(url_for('admin_dashboard'))
+            return redirect(url_for('main.admin_dashboard'))
         else:
             flash("Invalid credentials. Try again.")
 
     return render_template('admin_login.html')
 
 
-from models import Feedback
+from app.models import Feedback
 from sqlalchemy import func
 
-@app.route('/admin_dashboard')
+@main.route('/admin_dashboard')
 def admin_dashboard():
     if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
+        return redirect(url_for('main.admin_login'))
 
     total_feedback = db.session.query(func.count(Feedback.id)).scalar()
 
@@ -621,13 +617,13 @@ def admin_dashboard():
     )
 
 
-@app.route('/admin_logout')
+@main.route('/admin_logout')
 def admin_logout():
     session.pop('admin_logged_in', None)
     return redirect('/admin_login')
 
 
-@app.route("/test-mail")
+@main.route("/test-mail")
 def test_mail():
     if 'user_id' not in session:
         return "❌ Login required to test mail."
@@ -657,8 +653,6 @@ If you're reading this, your SMTP (Gmail) configuration is working properly!
         return "❌ Failed to send test email. Please check SMTP credentials in .env and Gmail app access settings."
 
 
-with app.app_context():
-    db.create_all()
 
 
 if __name__ == "__main__":

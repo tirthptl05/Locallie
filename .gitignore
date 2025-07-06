@@ -14,3 +14,9 @@ venv/
 # System files (optional)
 .DS_Store
 Thumbs.db
+
+instance/
+
+.vscode/
+
+.idea/

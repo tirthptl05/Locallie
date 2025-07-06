@@ -3,8 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <title>Locallie - Connect with Locals</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- External CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+  <!-- Inline Styling (Landing-Specific) -->
   <style>
     body {
       font-family: 'Segoe UI', sans-serif;
@@ -31,6 +35,8 @@
       list-style: none;
       display: flex;
       gap: 24px;
+      margin: 0;
+      padding: 0;
     }
 
     .nav-links a {
@@ -45,6 +51,7 @@
       border-radius: 6px;
       text-decoration: none;
       font-weight: 600;
+      transition: 0.2s ease;
     }
 
     .btn {
@@ -57,6 +64,11 @@
       border: 2px solid #2563eb;
       color: #2563eb;
       background: transparent;
+    }
+
+    .btn:hover,
+    .btn-outline:hover {
+      opacity: 0.9;
     }
 
     .hero {
@@ -97,6 +109,7 @@
       .hero {
         flex-direction: column;
         text-align: center;
+        padding: 60px 20px;
       }
 
       .hero-text,
@@ -111,30 +124,36 @@
   </style>
 </head>
 <body>
+
+  <!-- Navbar -->
   <nav class="navbar">
     <div class="logo">Locallie 🌍</div>
+
     <ul class="nav-links">
-      <li><a href="{{ url_for('index') }}">Home</a>
-</li>
-      <li><a href="/how-it-works">How It Works</a></li>
-      <li><a href="/about">About</a></li>
-      <li><a href="/contact">Contact</a></li>
+      <li><a href="{{ url_for('main.index') }}">Home</a></li>
+      <li><a href="{{ url_for('main.how_it_works') }}">How It Works</a></li>
+      <li><a href="{{ url_for('main.about') }}">About</a></li>
+      <li><a href="{{ url_for('main.contact') }}">Contact</a></li>
     </ul>
+
     <div class="auth-buttons">
-      <a href="/signin" class="btn-outline">Sign In</a>
-      <a href="/signup" class="btn">Get Started</a>
+      <a href="{{ url_for('main.signin') }}" class="btn-outline">Sign In</a>
+      <a href="{{ url_for('main.signup') }}" class="btn">Get Started</a>
     </div>
   </nav>
 
+  <!-- Hero Section -->
   <section class="hero">
     <div class="hero-text">
       <h1>Explore smarter with Locallie 🌍</h1>
       <p>Instant help from real locals. Safe, quick & community-powered support — wherever you travel.</p>
-      <a href="/signup" class="btn">Get Started</a>
+      <a href="{{ url_for('main.signup') }}" class="btn">Get Started</a>
     </div>
+
     <div class="hero-img">
-      <img src="{{ url_for('static', filename='images/hero.svg') }}" alt="Hero image">
+      <img src="{{ url_for('static', filename='images/hero.svg') }}" alt="Tourist getting local help">
     </div>
   </section>
+
 </body>
 </html>

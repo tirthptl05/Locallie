@@ -1,0 +1,47 @@
+{% extends "admin_base.html" %}
+
+{% block content %}
+<h2 class="mb-4">Platform Feedback</h2>
+
+<!-- 🔽 Filter Form -->
+<form method="GET" action="/admin/view_feedback" class="mb-4">
+    <label for="status" class="form-label">Filter by status:</label>
+    <div class="row g-2 align-items-center">
+        <div class="col-md-4">
+            <select name="status" id="status" class="form-select" onchange="this.form.submit()">
+                <option value="" {% if not current_filter %}selected{% endif %}>All</option>
+                <option value="Pending" {% if current_filter == 'Pending' %}selected{% endif %}>Pending</option>
+                <option value="Resolved" {% if current_filter == 'Resolved' %}selected{% endif %}>Resolved</option>
+            </select>
+        </div>
+    </div>
+</form>
+
+<!-- 📋 Feedback Cards -->
+{% for fb in feedbacks %}
+<div class="card mb-3 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title">{{ fb.subject }}</h5>
+        <h6 class="card-subtitle mb-2 text-muted">User ID: {{ fb.user_id }} ({{ fb.user_role }})</h6>
+        <p class="card-text">{{ fb.message }}</p>
+
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                {% if fb.status == 'Resolved' %}
+                    <span class="badge bg-success">Resolved</span>
+                {% else %}
+                    <span class="badge bg-warning text-dark">Pending</span>
+                {% endif %}
+                <small class="text-muted ms-3">{{ fb.timestamp }}</small>
+            </div>
+            {% if fb.status != 'Resolved' %}
+            <a href="/admin/resolve_feedback/{{ fb.id }}" class="btn btn-sm btn-outline-success">✅ Mark as Resolved</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">No feedback found for selected filter.</div>
+{% endfor %}
+
+{% endblock %}
