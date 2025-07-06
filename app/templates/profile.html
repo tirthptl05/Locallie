@@ -27,15 +27,17 @@
                 {% for hr in help_requests %}
                 <div class="card mb-3 shadow-sm">
                     <div class="card-body">
-                        <h5 class="card-title">{{ hr[1] }} | <span class="badge bg-secondary">{{ hr[2] }}</span></h5>
-                        <p class="card-text"><strong>Query:</strong> {{ hr[0] }}</p>
+                        <h5 class="card-title">{{ hr.city }} | 
+                          <span class="badge bg-secondary">{{ hr.status }}</span></h5>
+                        <p class="card-text"><strong>Query:</strong> {{ hr.query_text }}</p>
 
-                        {% if replies[hr[3]] %}
+                        {% if replies[hr.id] %}
                             <p class="mt-2"><strong>Replies:</strong></p>
                             <ul class="list-group list-group-flush">
-                                {% for r in replies[hr[3]] %}
+                                {% for r in replies[hr.id] %}
                                 <li class="list-group-item">
-                                    <strong>{{ r[0] }}</strong>: {{ r[1] }} <em class="text-muted">on {{ r[2] }}</em>
+                                    <strong>{{ r.local_email }}</strong>: {{ r.message }} 
+                                    <em class="text-muted">on {{ r.created_at.strftime('%b %d, %Y %I:%M %p') }}</em>
                                 </li>
                                 {% endfor %}
                             </ul>

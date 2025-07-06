@@ -1,10 +1,13 @@
 from flask import Flask
 from .extensions import db, mail
 from dotenv import load_dotenv
+from flask_socketio import SocketIO
 import os
 
+socketio = SocketIO()
 load_dotenv()  # ✅ Load environment variables from .env
 
+socketio = SocketIO(cors_allowed_origins="*")
 def create_app():
     app = Flask(__name__)
 
@@ -21,9 +24,11 @@ def create_app():
 
     db.init_app(app)
     mail.init_app(app)
+    socketio.init_app(app)
 
     # ✅ Import and register blueprint
     from .routes import main
     app.register_blueprint(main)
+    
 
     return app

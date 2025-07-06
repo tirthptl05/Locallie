@@ -1,11 +1,9 @@
-from app import create_app
-from app.extensions import db
+# run.py
+
+from app import create_app, socketio
+import app.sockets  # 👈 important to load the event listeners
 
 app = create_app()
 
-# ✅ This ensures db.create_all() runs within app context
-with app.app_context():
-    db.create_all()
-
-if __name__ == "__main__":
-    app.run(debug=True)
+if __name__ == '__main__':
+    socketio.run(app, debug=True)

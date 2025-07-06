@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <title>Locallie - Connect with Locals</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+
 
   <!-- External CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -154,6 +158,23 @@
       <img src="{{ url_for('static', filename='images/hero.svg') }}" alt="Tourist getting local help">
     </div>
   </section>
+<!-- ... your existing HTML remains unchanged -->
+
+<!-- Socket.IO Script & WebSocket Listener -->
+<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+<script>
+  const socket = io();
+
+  socket.on('new_reply', function (data) {
+    console.log("📩 New reply:", data);
+    // Optionally show toast or update part of UI
+  });
+
+  socket.on('new_feedback', function (data) {
+    console.log("📝 New feedback:", data);
+    // Admin panel live update if needed
+  });
+</script>
 
 </body>
 </html>

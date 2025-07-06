@@ -7,6 +7,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 from flask_mail import Mail, Message
 from flask import jsonify
+from app import socketio
+
+
 
 import os
 
@@ -69,7 +72,8 @@ def signup():
         email = request.form['email']
         password = request.form['password']
         role = request.form.get('role')
-        city = request.form.get('city') if role == 'local' else None
+        city = request.form.get('city')  # now required for all roles
+
 
         hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
 
@@ -175,25 +179,22 @@ def profile():
 
     user_id = session['user_id']
     user = User.query.get(user_id)
-
     if not user:
         flash("User not found.")
         return redirect(url_for('main.signin'))
 
-    # ✅ Do NOT overwrite HelpRequest model name
-    user_requests = db.session.query(HelpRequest) \
-        .filter(HelpRequest.user_id == user_id) \
-        .order_by(HelpRequest.created_at.desc()) \
-        .all()
+    user_requests = HelpRequest.query.filter_by(user_id=user_id).order_by(HelpRequest.created_at.desc()).all()
 
-    # ✅ Replies dictionary per request ID
+    # Replies grouped by help_request_id, joined with User for local_name
     replies = {}
     for req in user_requests:
-        replies[req.id] = db.session.query(Reply) \
-            .filter(Reply.help_request_id == req.id) \
-            .join(User, Reply.local_id == User.id) \
-            .add_columns(User.name.label("local_name"), Reply.message, Reply.created_at) \
-            .all()
+        replies[req.id] = db.session.query(
+            User.email.label("local_email"),
+            Reply.message,
+            Reply.created_at
+        ).join(User, Reply.local_id == User.id).filter(
+            Reply.help_request_id == req.id
+        ).all()
 
     return render_template(
         'profile.html',
@@ -205,40 +206,65 @@ def profile():
     )
 
 
+    
+
+
 from app.models import HelpRequest  # make sure it's defined
 from datetime import datetime
 
 @main.route('/help-request', methods=['GET', 'POST'])
 def help_request():
-    # Access control
     if 'user_id' not in session or session.get('role') != 'traveler':
         flash("Access denied.")
         return redirect(url_for('main.signin'))
 
     if request.method == 'POST':
-        query_text = request.form['query']  # 🟢 match column name
-        city = request.form['city']
-        email_alert = 'email_alert' in request.form  # checkbox
-
-        new_request = HelpRequest(
-            user_id=session['user_id'],
-            query_text=query_text,  # 🟢 corrected here
-            city=city,
-            email_alert=email_alert,
-            created_at=datetime.utcnow()
-        )
+        query_text = request.form.get('query')
+        city = request.form.get('city')
+        email_alert = 'email_alert' in request.form
 
         try:
+            new_request = HelpRequest(
+                user_id=session['user_id'],
+                query_text=query_text,
+                city=city,
+                email_alert=email_alert,
+                created_at=datetime.utcnow()
+            )
             db.session.add(new_request)
             db.session.commit()
-            flash("Help request submitted!")
-            return redirect('/tourist')
-        except Exception as e:
+
+            try:
+                from app import socketio
+                tourist_email = session.get('email')
+                socketio.emit('new_reply', {
+                    'help_id': new_request.id,
+                    'message': query_text,
+                    'from': tourist_email
+                }, broadcast=True)
+            except Exception as socket_error:
+                print("❌ WebSocket emit error:", socket_error)
+
+            flash("✅ Help request submitted successfully!")
+            return redirect(url_for('main.tourist_dashboard'))
+
+        except Exception as db_error:
             db.session.rollback()
-            print("Error while creating help request:", e)
-            flash("Something went wrong. Please try again.")
+            print("❌ DB Error:", db_error)
+            flash("❌ Something went wrong. Please try again.")
 
     return render_template('help_form.html')
+
+
+
+@main.after_request
+def add_cache_headers(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+
 
 
 
@@ -258,21 +284,21 @@ def local_inbox():
         flash("Access denied.")
         return redirect(url_for('main.signin'))
 
+    from app import socketio
+
     local_id = session['user_id']
     local_user = db.session.query(User).get(local_id)
     local_city = local_user.city
 
-    # Get city from form (POST) or query param (GET)
-    selected_city = request.form.get('filter_city') or request.args.get('filter_city') or 'my_city'
-
-    # ✅ Handle POST (reply submission)
+    # Handle POST reply submission (support both normal form and AJAX)
     if request.method == 'POST':
         request_id = request.form.get('request_id')
         reply_text = request.form.get('reply')
+        selected_city = request.form.get('filter_city') or 'my_city'
 
         if reply_text and request_id:
-            reply = Reply(help_request_id=request_id, local_id=local_id, message=reply_text)
-            db.session.add(reply)
+            new_reply = Reply(help_request_id=request_id, local_id=local_id, message=reply_text)
+            db.session.add(new_reply)
 
             req = db.session.query(HelpRequest).get(request_id)
             if req:
@@ -280,59 +306,95 @@ def local_inbox():
                 tourist = db.session.query(User).get(req.user_id)
 
                 if tourist and getattr(tourist, 'is_verified', True) and req.email_alert:
-                    msg = Message(
-                        subject="New reply on your Locallie help request!",
-                        recipients=[tourist.email],
-                        body=f"Hi there! Your help request has received a reply:\n\n'{reply_text}'\n\nPlease check your Locallie dashboard."
-                    )
                     try:
+                        msg = Message(
+                            subject="New reply on your Locallie help request!",
+                            recipients=[tourist.email],
+                            body=f"Hi there! Your help request has received a reply:\n\n'{reply_text}'\n\nCheck your Locallie dashboard!"
+                        )
                         mail.send(msg)
                     except Exception as e:
                         print("Email send error:", e)
 
             db.session.commit()
+
+            socketio.emit('new_reply', {
+                'help_id': new_reply.help_request_id,
+                'message': new_reply.message,
+                'from': local_user.email
+            }, broadcast=True)
+
             flash("✅ Reply sent and tourist notified!")
         else:
             flash("❌ Reply cannot be empty!")
 
         return redirect(url_for('main.local_inbox', filter_city=selected_city))
 
-    # ✅ Filtering Help Requests
+    # GET method — for showing inbox
+    selected_city = request.args.get('filter_city') or 'my_city'
+
+    # Filter help requests based on selected city
     if selected_city == 'all':
-        filtered_requests = db.session.query(HelpRequest).filter(
-            HelpRequest.status.in_(['Pending', 'Replied'])
-        )
+        filtered_requests = db.session.query(HelpRequest).join(User, HelpRequest.user_id == User.id).add_columns(
+            HelpRequest.id,
+            HelpRequest.query_text,
+            HelpRequest.city,
+            HelpRequest.status,
+            HelpRequest.created_at,
+            User.email.label('tourist_email')
+        ).filter(HelpRequest.status.in_(['Pending', 'Replied']))
     elif selected_city == 'my_city':
-        filtered_requests = db.session.query(HelpRequest).filter(
-            and_(
-                HelpRequest.status.in_(['Pending', 'Replied']),
-                HelpRequest.city == local_city
-            )
+        filtered_requests = db.session.query(HelpRequest).join(User, HelpRequest.user_id == User.id).add_columns(
+            HelpRequest.id,
+            HelpRequest.query_text,
+            HelpRequest.city,
+            HelpRequest.status,
+            HelpRequest.created_at,
+            User.email.label('tourist_email')
+        ).filter(
+            HelpRequest.status.in_(['Pending', 'Replied']),
+            HelpRequest.city == local_city
         )
     else:
-        filtered_requests = db.session.query(HelpRequest).filter(
-            and_(
-                HelpRequest.status.in_(['Pending', 'Replied']),
-                HelpRequest.city == selected_city
-            )
+        filtered_requests = db.session.query(HelpRequest).join(User, HelpRequest.user_id == User.id).add_columns(
+            HelpRequest.id,
+            HelpRequest.query_text,
+            HelpRequest.city,
+            HelpRequest.status,
+            HelpRequest.created_at,
+            User.email.label('tourist_email')
+        ).filter(
+            HelpRequest.status.in_(['Pending', 'Replied']),
+            HelpRequest.city == selected_city
         )
 
     pending_requests = filtered_requests.order_by(HelpRequest.created_at.desc()).all()
 
-    # ✅ Replies per request
+    # Replies per help request
     all_request_ids = [r.id for r in pending_requests]
     replies_by_request = {}
 
     if all_request_ids:
         replies = db.session.query(Reply).filter(
-            Reply.local_id == local_id,
-            Reply.help_request_id.in_(all_request_ids)
-        ).all()
+    Reply.help_request_id.in_(all_request_ids)
+    ).join(User, Reply.local_id == User.id) \
+ .add_columns(User.name.label("local_name"), Reply.message, Reply.created_at, Reply.help_request_id) \
+ .all()
+        
+        replies_by_request = {}
+        for r in replies:
+         if r.local_name and r.message:
+          replies_by_request.setdefault(r.help_request_id, []).append({
+            'name': r.local_name,
+            'message': r.message,
+            'time': r.created_at.strftime("%Y-%m-%d %H:%M")
+        })
+
 
         for r in replies:
             replies_by_request.setdefault(r.help_request_id, []).append(r.message)
 
-    # ✅ All city options for dropdown
+    # Dropdown city options
     all_cities = [c[0] for c in db.session.query(HelpRequest.city).distinct().all() if c[0]]
 
     return render_template(
@@ -342,6 +404,8 @@ def local_inbox():
         all_cities=all_cities,
         replies_by_request=replies_by_request
     )
+
+
 
 
 
