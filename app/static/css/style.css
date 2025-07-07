@@ -79,3 +79,53 @@ body {
 }
 
 
+
+.thread-card {
+  background: #f8f9fa;
+  border-left: 6px solid #0d6efd;
+}
+
+.reply-thread {
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.reply-bubble {
+  background-color: #ffffff;
+  padding: 10px 15px;
+  border-radius: 14px;
+  margin-bottom: 8px;
+  max-width: 80%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.reply-bubble.left {
+  background-color: #e9ecef;
+  text-align: left;
+}
+
+.reply-bubble.right {
+  background-color: #d0bfff;
+  margin-left: auto;
+  text-align: left;
+  color: #000;
+}
+
+.reply-bubble .meta {
+  font-size: 0.8rem;
+  margin-bottom: 2px;
+  font-weight: 500;
+}
+
+.reply-bubble .text {
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+}
+
+.reply-input {
+  border-radius: 20px;
+  resize: none;
+  padding: 8px 15px;
+  height: 38px;
+}

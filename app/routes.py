@@ -119,6 +119,7 @@ def signin():
                 session['name'] = user.name
                 session['email'] = user.email
                 session['role'] = user.role
+                session['city'] = user.city
 
                 # Save city in session for locals
                 if user.role == 'local' and user.city:
@@ -457,6 +458,8 @@ def submit_reply():
 
 
 
+
+
 @main.route('/about')
 def about():
     return render_template('about.html')
@@ -715,6 +718,69 @@ If you're reading this, your SMTP (Gmail) configuration is working properly!
     except Exception as e:
         print("SMTP Error:", e)
         return "❌ Failed to send test email. Please check SMTP credentials in .env and Gmail app access settings."
+
+
+from flask import request, session, jsonify
+from app.models import db, EmergencyAlert
+from app.email_utils import send_emergency_email
+from datetime import datetime
+
+@main.route('/emergency', methods=['POST'])
+def emergency():
+    data = request.get_json()
+    lat = data.get('latitude')
+    lon = data.get('longitude')
+
+    print("📍 Received emergency alert:", lat, lon)
+
+    email = session.get('email')
+    city = session.get('city')
+    user_id = session.get('user_id')
+
+    print("🧾 Email:", email)
+    print("🌆 City:", city)
+    print("🧍 ID:", user_id)
+
+    if not email or not city or not user_id:
+        print("❌ Session missing values")
+        return jsonify({"status": "error", "message": "Not logged in"}), 403
+
+    try:
+        result = send_emergency_email(
+            to_email='mahguycrypto@gmail.com',
+            from_email=email,
+            city=city,
+            lat=lat,
+            lon=lon
+        )
+        print("📧 Email send result:", result)
+    except Exception as e:
+        print("❌ Email failed:", e)
+        return jsonify({"status": "error", "message": "Email failed"}), 500
+
+    try:
+        alert = EmergencyAlert(
+            user_id=user_id,
+            email=email,
+            city=city,
+            lat=lat,
+            lon=lon,
+            timestamp=datetime.utcnow()
+        )
+        db.session.add(alert)
+        db.session.commit()
+    except Exception as e:
+        print("❌ DB Error:", e)
+        return jsonify({"status": "error", "message": "DB save failed"}), 500
+
+    return jsonify({"status": "success", "message": "Alert sent!"})
+
+
+
+
+
+
+
 
 
 

@@ -1,78 +1,70 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2 class="mb-4">Pending Help Requests</h2>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
 
-<!-- 🌆 City Filter Dropdown -->
-<form method="get" action="{{ url_for('main.local_inbox') }}" class="mb-3">
-  <div class="row g-2 align-items-center">
-    <div class="col-md-4">
-      <select name="filter_city" class="form-select" id="cityFilter" onchange="this.form.submit()">
-        <option value="my_city">My City</option>
-        <option value="all">All Cities</option>
-        {% for city in all_cities %}
-          <option value="{{ city }}">{{ city }}</option>
-        {% endfor %}
-      </select>
-    </div>
-  </div>
-</form>
+<div class="container py-5">
+  <h1 class="mb-4 text-center text-primary fw-bold">📬 Locallie - Your Local Help Inbox</h1>
 
-<!-- 📋 Help Requests Table -->
-<table class="table table-bordered table-hover">
-  <thead class="table-dark">
-    <tr>
-      <th>ID</th>
-      <th>Tourist</th>
-      <th>Query</th>
-      <th>City</th>
-      <th>Action</th>
-    </tr>
-  </thead>
-  <tbody>
+  <!-- 🌆 City Filter -->
+  <form method="get" action="{{ url_for('main.local_inbox') }}" class="mb-4 text-center">
+    <select name="filter_city" class="form-select w-auto d-inline shadow-sm rounded-pill px-4" id="cityFilter" onchange="this.form.submit()">
+      <option value="my_city">🌍 My City</option>
+      <option value="all">🌐 All Cities</option>
+      {% for city in all_cities %}
+        <option value="{{ city }}">{{ city }}</option>
+      {% endfor %}
+    </select>
+  </form>
+
+  {% if pending_requests %}
     {% for r in pending_requests %}
-    <tr>
-      <td>{{ r.id }}</td>
-      <td>{{ r.tourist_email }}</td>
-      <td>
-        {{ r.query_text }}
-
-        {% if r.status == 'Replied' %}
-          <div class="text-success small mt-2"><strong>✅ You replied to this</strong></div>
-        {% endif %}
-
-        {% if replies_by_request[r.id] %}
-          <div class="mt-2">
-            {% for reply in replies_by_request[r.id] %}
-  <div class="d-flex align-items-start mb-1">
-    <span class="me-2">🗨️</span>
-    <div class="bg-light rounded px-2 py-1 shadow-sm">
-      <small><strong>{{ reply.name }}</strong>: {{ reply.message }} <em class="text-muted">on {{ reply.time }}</em></small>
-    </div>
-  </div>
-{% endfor %}
-
+    <div class="card shadow-sm rounded-4 mb-4 thread-card">
+      <div class="card-body">
+        <!-- Thread Header -->
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            <h5 class="fw-semibold text-dark mb-0">🧳 {{ r.tourist_email }}</h5>
+            <span class="badge bg-info text-dark">🏙️ {{ r.city }}</span>
           </div>
-        {% endif %}
-      </td>
-      <td>{{ r.city }}</td>
-      <td>
-        <form class="ajax-reply-form" data-request-id="{{ r.id }}">
-          <textarea name="reply" class="form-control mb-2" rows="2" placeholder="Write your reply..." required></textarea>
-          <button type="submit" class="btn btn-success btn-sm">Send Reply</button>
-        </form>
-      </td>
-    </tr>
-    {% else %}
-    <tr>
-      <td colspan="5" class="text-center text-muted">No pending requests in this filter.</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+          {% if r.status == 'Replied' %}
+            <span class="badge bg-success">✅ Replied</span>
+          {% endif %}
+        </div>
 
-<!-- ✅ jQuery AJAX Script -->
+        <p class="fs-6 mb-3">❓ <strong>{{ r.query_text }}</strong></p>
+
+        <!-- Replies Thread -->
+        <div class="reply-thread mb-3">
+          {% for reply in replies_by_request[r.id] %}
+            <div class="reply-bubble {% if reply.name == current_local_name %}right{% else %}left{% endif %}">
+              <div class="meta">
+                <strong>{% if reply.name == current_local_name %}You{% else %}{{ reply.name }}{% endif %}</strong>
+                <span class="text-muted">• {{ reply.time }}</span>
+              </div>
+              <div class="text">{{ reply.message }}</div>
+            </div>
+          {% endfor %}
+        </div>
+
+        <!-- Reply Form -->
+        <form class="ajax-reply-form d-flex gap-2" data-request-id="{{ r.id }}">
+          <textarea name="reply" class="form-control reply-input" placeholder="Write a reply..." required></textarea>
+          <button type="submit" class="btn btn-outline-primary rounded-pill">Send</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="text-center text-muted mt-5">
+      <h5>🚫 No help requests to show in this filter.</h5>
+    </div>
+  {% endif %}
+</div>
+
+<!-- ✅ AJAX + WebSocket -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 <script>
   $(document).ready(function () {
     $('.ajax-reply-form').on('submit', function (e) {
@@ -85,16 +77,10 @@
         url: '/submit_reply',
         type: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({
-          request_id: requestId,
-          reply: replyText
-        }),
+        data: JSON.stringify({ request_id: requestId, reply: replyText }),
         success: function (response) {
           if (response.status === 'success') {
-            alert("✅ Reply sent!");
-            const currentURL = new URL(window.location.href);
-            const filterCity = currentURL.searchParams.get("filter_city") || "my_city";
-            window.location.href = `/local-inbox?filter_city=${filterCity}`;
+            location.reload(); // reload the page to show updated replies
           } else {
             alert("❌ " + (response.message || "Reply failed."));
           }
@@ -105,46 +91,24 @@
         }
       });
     });
-  });
-</script>
 
-<!-- ✅ WebSocket for Real-Time Updates -->
-<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
-<script>
-  const socket = io();
-
-  socket.on('new_help_request', function (data) {
-    console.log("📨 New help request received:", data);
-
-    const currentCity = "{{ selected_city }}";
-    if (currentCity === 'all' || currentCity === data.city) {
-      location.reload();
-    }
+    const socket = io();
+    socket.on('new_help_request', data => location.reload());
+    socket.on('new_reply', data => location.reload());
   });
 
-  socket.on('new_reply', function (data) {
-    console.log("📨 New reply via WebSocket:", data);
-  });
-</script>
-
-<!-- ✅ Keep dropdown in sync with backend -->
-<script>
+  // City dropdown sync
   document.addEventListener("DOMContentLoaded", function () {
     const selected = "{{ selected_city }}";
     const dropdown = document.getElementById("cityFilter");
-    if (dropdown) {
-      dropdown.value = selected;
+    if (dropdown) dropdown.value = selected;
+  });
+
+  window.addEventListener('pageshow', function (event) {
+    if (performance.getEntriesByType("navigation")[0].type === "back_forward") {
+      location.reload();
     }
   });
 </script>
-
-<script>
-window.addEventListener('pageshow', function (event) {
-  if (performance.getEntriesByType("navigation")[0].type === "back_forward") {
-    location.reload();  // 🔁 Forces reloading the inbox page to restore correct filter state
-  }
-});
-</script>
-
 
 {% endblock %}

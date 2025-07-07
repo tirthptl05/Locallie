@@ -69,3 +69,17 @@ class Feedback(db.Model):
     message = db.Column(db.Text)
     status = db.Column(db.String(20), default='Pending')
     timestamp = db.Column(db.DateTime, default=db.func.now())
+
+# ---------------------- Emergency Alert Table ----------------------
+# Create EmergencyAlert model in models.py
+class EmergencyAlert(db.Model):
+    __tablename__ = 'emergency_alert'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    email = db.Column(db.String(120))
+    city = db.Column(db.String(100))
+    lat = db.Column(db.Float)
+    lon = db.Column(db.Float)
+    timestamp = db.Column(db.DateTime, default=db.func.now())
+
